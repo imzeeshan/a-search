@@ -233,8 +233,9 @@ export default function Home() {
         {/* Search results section */}
         {/* Loading indicator */}
         {isLoading && (
-          <div className="flex justify-center items-center py-8">
+          <div className="flex flex-col justify-center items-center py-8 space-y-4">
             <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            <p className="text-gray-600 text-sm animate-pulse">Searching across educational resources...</p>
           </div>
         )}
         
