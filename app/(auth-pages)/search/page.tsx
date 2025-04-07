@@ -49,21 +49,24 @@ const gradeOptions: GradeOptionType[] = [
 
 
 
-// Individual search result component
-const SearchResult = ({ title, description, image, type }: { title: string; description: string; image: string; type: string }) => {
+const SearchResult = ({ title, description, image, type, link }: { title: string; description: string; image: string; type: string; link: string }) => {
   const placeholderImage = "https://picsum.photos/200";
   return (
     <div className="flex border rounded-lg overflow-hidden mb-4 bg-white">
       <div className="w-1/4 min-w-[120px] max-w-[180px] relative">
         <img 
           src={image || placeholderImage}
-          alt={title}
+          alt={title || "Search result image"}
           className="w-full h-full object-cover"
         />
       </div>
       <div className="p-4 flex-1">
         <div className="text-xs text-blue-600 font-medium mb-1">{type}</div>
-        <h3 className="font-medium text-lg mb-1">{title}</h3>
+        <h3 className="font-medium text-lg mb-1">
+          <a href={link} target='_blank' rel="noopener noreferrer" className="hover:underline">
+            {title}
+          </a>
+        </h3>
         <div className="text-xs text-gray-500 mb-2">{type} Resource</div>
         <p className="text-sm text-gray-600">{description}</p>
       </div>
@@ -89,6 +92,7 @@ const SearchResults = ({ results }: { results: SearchResultType[] }) => {
               description={result.description}
               image={result.image}
               type={result.type}
+              link={result.url}
             />
           ))
         )}
@@ -98,7 +102,9 @@ const SearchResults = ({ results }: { results: SearchResultType[] }) => {
 };
 
 export default function Home() {
-  const [searchQuery, setSearchQuery] = useState('Volcanoes');
+  const [searchQuery, setSearchQuery] = useState(
+    typeof window !== 'undefined' ? localStorage.getItem('lastSearchQuery') || 'Volcanoes' : 'Volcanoes'
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultType[]>([]);
   const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
@@ -140,6 +146,9 @@ export default function Home() {
     setSearchResults([]);
     setSearchAgentActions([...defaultSearchAgentActions]);
 
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('lastSearchQuery', searchQuery);
+    }
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
