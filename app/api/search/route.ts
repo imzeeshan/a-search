@@ -321,14 +321,36 @@ export async function POST(request: Request) {
       });
     }
 
+    // Execute searches in parallel but don't wait for completion
     const [pbsResults, ck12Results, khanResults] = await Promise.all([
-      searchPBS(searchQuery),
-      searchCK12(searchQuery),
-      searchKhanAcademy(searchQuery)
+      searchPBS(searchQuery).catch(err => {
+        console.error('PBS search error:', err);
+        return [];
+      }),
+      searchCK12(searchQuery).catch(err => {
+        console.error('CK12 search error:', err);
+        return [];
+      }),
+      searchKhanAcademy(searchQuery).catch(err => {
+        console.error('Khan Academy search error:', err);
+        return [];
+      })
     ]);
 
-    const allResults = [...pbsResults, ...ck12Results, ...khanResults];
+    // Store the results asynchronously without waiting
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      // Store results in background without waiting
+      Promise.all([
+        storeResults(pbsResults, user.id, supabase),
+        storeResults(ck12Results, user.id, supabase),
+        storeResults(khanResults, user.id, supabase)
+      ]).catch(err => console.error('Error storing results:', err));
+    }
 
+    // Return results immediately
+    const allResults = [...pbsResults, ...ck12Results, ...khanResults];
     return new Response(JSON.stringify({ results: allResults }), {
       headers: { 'Content-Type': 'application/json' }
     });
@@ -338,5 +360,30 @@ export async function POST(request: Request) {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+}
+
+async function storeResults(results: any[], userId: string, supabase: any) {
+  for (const result of results) {
+    try {
+      const { data: existingData } = await supabase
+        .from('search_results')
+        .select('*')
+        .eq('title', result.title)
+        .eq('source', result.source)
+        .eq('user_id', userId)
+        .single();
+
+      if (!existingData) {
+        await supabase
+          .from('search_results')
+          .insert([{
+            ...result,
+            user_id: userId
+          }]);
+      }
+    } catch (error) {
+      console.error('Error storing result:', error);
+    }
   }
 }
