@@ -1,8 +1,9 @@
 'use client';
 
 import { Search, ChevronDown } from 'lucide-react';
-import { useState, useEffect, useTransition, useActionState } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import { search } from '@/app/actions/search';
+import { useFormState } from 'react-dom';
 
 type SearchResult = {
   id: string;
@@ -23,6 +24,12 @@ type PaginationType = {
   totalItems: number;
   hasNextPage: boolean;
   hasPreviousPage: boolean;
+};
+
+type SearchState = {
+  results: SearchResult[];
+  pagination: PaginationType;
+  pending?: boolean;
 };
 
 // Define type for grade options
@@ -55,163 +62,6 @@ const gradeOptions: GradeOptionType[] = [
   { id: 13, label: "Grade 12", value: "12" },
 ];
 
-// Search result component
-const SearchResult = ({ title, description, image, type, link }: { title: string; description: string; image: string; type: string; link: string }) => {
-  const placeholderImage = "https://picsum.photos/200";
-  return (
-    <div className="flex border rounded-lg overflow-hidden mb-4 bg-white">
-      <div className="w-1/4 min-w-[120px] max-w-[180px] relative">
-        <img 
-          src={image || placeholderImage}
-          alt={title || "Search result image"}
-          className="w-full h-full object-cover"
-        />
-      </div>
-      <div className="p-4 flex-1">
-        <div className="text-xs text-blue-600 font-medium mb-1">{type}</div>
-        <h3 className="font-medium text-lg mb-1">
-          <a href={link} target='_blank' rel="noopener noreferrer" className="hover:underline">
-            {title}
-          </a>
-        </h3>
-        <div className="text-xs text-gray-500 mb-2">{type} Resource</div>
-        <p className="text-sm text-gray-600">{description}</p>
-      </div>
-    </div>
-  );
-};
-
-// Pagination component
-const Pagination = ({ pagination, onPageChange }: { pagination: PaginationType, onPageChange: (page: number) => void }) => {
-  const { currentPage, totalPages, hasNextPage, hasPreviousPage } = pagination;
-  
-  // Generate page numbers to display
-  const getPageNumbers = () => {
-    const pages = [];
-    const maxPagesToShow = 5;
-    
-    if (totalPages <= maxPagesToShow) {
-      // Show all pages if total pages is less than or equal to maxPagesToShow
-      for (let i = 1; i <= totalPages; i++) {
-        pages.push(i);
-      }
-    } else {
-      // Always show first page
-      pages.push(1);
-      
-      // Calculate start and end of page range around current page
-      let startPage = Math.max(2, currentPage - 1);
-      let endPage = Math.min(totalPages - 1, currentPage + 1);
-      
-      // Adjust if we're at the start or end
-      if (currentPage <= 2) {
-        endPage = Math.min(totalPages - 1, 4);
-      } else if (currentPage >= totalPages - 1) {
-        startPage = Math.max(2, totalPages - 3);
-      }
-      
-      // Add ellipsis if needed before startPage
-      if (startPage > 2) {
-        pages.push('...');
-      }
-      
-      // Add page numbers in range
-      for (let i = startPage; i <= endPage; i++) {
-        pages.push(i);
-      }
-      
-      // Add ellipsis if needed after endPage
-      if (endPage < totalPages - 1) {
-        pages.push('...');
-      }
-      
-      // Always show last page
-      if (totalPages > 1) {
-        pages.push(totalPages);
-      }
-    }
-    
-    return pages;
-  };
-  
-  return (
-    <div className="flex items-center justify-center space-x-2 my-6">
-      <button
-        onClick={() => onPageChange(currentPage - 1)}
-        disabled={!hasPreviousPage}
-        className={`px-3 py-1 rounded border ${!hasPreviousPage ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-      >
-        Previous
-      </button>
-      
-      {getPageNumbers().map((page, index) => (
-        <button
-          key={index}
-          onClick={() => typeof page === 'number' ? onPageChange(page) : null}
-          disabled={typeof page !== 'number'}
-          className={`w-8 h-8 flex items-center justify-center rounded ${typeof page !== 'number' ? 'cursor-default' : page === currentPage ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 border'}`}
-        >
-          {page}
-        </button>
-      ))}
-      
-      <button
-        onClick={() => onPageChange(currentPage + 1)}
-        disabled={!hasNextPage}
-        className={`px-3 py-1 rounded border ${!hasNextPage ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-      >
-        Next
-      </button>
-    </div>
-  );
-};
-
-// Search results container component
-const SearchResults = ({ results, pagination, onPageChange }: { results: SearchResult[], pagination?: PaginationType, onPageChange?: (page: number) => void }) => {
-  return (
-    <div className="w-[600px] max-w-full px-4 mb-10">
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-medium">Results</h2>
-        <span className="text-sm text-gray-600">
-          {pagination ? `Showing ${(pagination.currentPage - 1) * pagination.pageSize + 1} - ${Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of ${pagination.totalItems}` : ''}
-        </span>
-      </div>
-      <div>
-        {results.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            No search results found. Try a different search term.
-          </div>
-        ) : (
-          <>
-            {results.map((result, index) => (
-              <SearchResult
-                key={`${result.id}-${result.source}-${index}`}
-                title={result.title}
-                description={result.description}
-                image={result.image}
-                type={result.type}
-                link={result.url}
-              />
-            ))}
-            
-            {pagination && onPageChange && pagination.totalPages > 1 && (
-              <div className="mt-6 border-t pt-6">
-                <Pagination pagination={pagination} onPageChange={onPageChange} />
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
-
-type SearchState = {
-  results: SearchResult[];
-  pagination: PaginationType;
-  pending?: boolean;
-};
-
 const initialState: SearchState = {
   results: [],
   pagination: {
@@ -228,14 +78,14 @@ const initialState: SearchState = {
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
+  const [searchAgentActions] = useState(defaultSearchAgentActions);
   const [isPending, startTransition] = useTransition();
-  const [state, formAction] = useActionState<SearchState>(search, initialState);
+  const [state, formAction] = useFormState(search, initialState);
 
-  const isLoading = state?.pending || false;
+  const isSearching = isPending;
 
   // Handle search form submission
-  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     formData.set('page', '1'); // Reset to first page on new search
@@ -285,7 +135,156 @@ export default function Home() {
     });
   }, []);
 
-  const isSearching = isLoading || isPending;
+  // Search result component
+  const SearchResult = ({ title, description, image, type, link }: { title: string; description: string; image: string; type: string; link: string }) => {
+    const placeholderImage = "https://picsum.photos/200";
+    return (
+      <div className="flex border rounded-lg overflow-hidden mb-4 bg-white">
+        <div className="w-1/4 min-w-[120px] max-w-[180px] relative">
+          <img 
+            src={image || placeholderImage}
+            alt={title || "Search result image"}
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="p-4 flex-1">
+          <div className="text-xs text-blue-600 font-medium mb-1">{type}</div>
+          <h3 className="font-medium text-lg mb-1">
+            <a href={link} target='_blank' rel="noopener noreferrer" className="hover:underline">
+              {title}
+            </a>
+          </h3>
+          <div className="text-xs text-gray-500 mb-2">{type} Resource</div>
+          <p className="text-sm text-gray-600">{description}</p>
+        </div>
+      </div>
+    );
+  };
+
+  // Pagination component
+  const Pagination = ({ pagination, onPageChange }: { pagination: PaginationType, onPageChange: (page: number) => void }) => {
+    const { currentPage, totalPages, hasNextPage, hasPreviousPage } = pagination;
+    
+    // Generate page numbers to display
+    const getPageNumbers = () => {
+      const pages = [];
+      const maxPagesToShow = 5;
+      
+      if (totalPages <= maxPagesToShow) {
+        // Show all pages if total pages is less than or equal to maxPagesToShow
+        for (let i = 1; i <= totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        // Always show first page
+        pages.push(1);
+        
+        // Calculate start and end of page range around current page
+        let startPage = Math.max(2, currentPage - 1);
+        let endPage = Math.min(totalPages - 1, currentPage + 1);
+        
+        // Adjust if we're at the start or end
+        if (currentPage <= 2) {
+          endPage = Math.min(totalPages - 1, 4);
+        } else if (currentPage >= totalPages - 1) {
+          startPage = Math.max(2, totalPages - 3);
+        }
+        
+        // Add ellipsis if needed before startPage
+        if (startPage > 2) {
+          pages.push('...');
+        }
+        
+        // Add page numbers in range
+        for (let i = startPage; i <= endPage; i++) {
+          pages.push(i);
+        }
+        
+        // Add ellipsis if needed after endPage
+        if (endPage < totalPages - 1) {
+          pages.push('...');
+        }
+        
+        // Always show last page
+        if (totalPages > 1) {
+          pages.push(totalPages);
+        }
+      }
+      
+      return pages;
+    };
+    
+    return (
+      <div className="flex items-center justify-center space-x-2 my-6">
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={!hasPreviousPage}
+          className={`px-3 py-1 rounded border ${!hasPreviousPage ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+        >
+          Previous
+        </button>
+        
+        {getPageNumbers().map((page, index) => (
+          <button
+            key={index}
+            onClick={() => typeof page === 'number' ? onPageChange(page) : null}
+            disabled={typeof page !== 'number'}
+            className={`w-8 h-8 flex items-center justify-center rounded ${typeof page !== 'number' ? 'cursor-default' : page === currentPage ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 border'}`}
+          >
+            {page}
+          </button>
+        ))}
+        
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={!hasNextPage}
+          className={`px-3 py-1 rounded border ${!hasNextPage ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+        >
+          Next
+        </button>
+      </div>
+    );
+  };
+
+  // Search results container component
+  const SearchResults = ({ results, pagination, onPageChange }: { results: SearchResult[], pagination?: PaginationType, onPageChange?: (page: number) => void }) => {
+    return (
+      <div className="w-[600px] max-w-full px-4 mb-10">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-medium">Results</h2>
+          <span className="text-sm text-gray-600">
+            {pagination ? `Showing ${(pagination.currentPage - 1) * pagination.pageSize + 1} - ${Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of ${pagination.totalItems}` : ''}
+          </span>
+        </div>
+        <div>
+          {results.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              No search results found. Try a different search term.
+            </div>
+          ) : (
+            <>
+              {results.map((result, index) => (
+                <SearchResult
+                  key={`${result.id}-${result.source}-${index}`}
+                  title={result.title}
+                  description={result.description}
+                  image={result.image}
+                  type={result.type}
+                  link={result.url}
+                />
+              ))}
+              
+              {pagination && onPageChange && pagination.totalPages > 1 && (
+                <div className="mt-6 border-t pt-6">
+                  <Pagination pagination={pagination} onPageChange={onPageChange} />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col items-center w-[600px] max-w-full mx-auto">
