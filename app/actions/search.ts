@@ -137,7 +137,22 @@ async function getStoredResults(supabase: any, userId: string, page: number = 1,
 
     // Add search filter if searchQuery is provided
     if (searchQuery?.trim()) {
-      query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+      // Create a normalized search query
+      const normalizedQuery = searchQuery.trim().toLowerCase();
+      
+      // Create a tsquery compatible string (handle multiple words)
+      const tsQuery = normalizedQuery
+        .split(/\s+/)
+        .filter(word => word.length > 0)
+        .map(word => `${word}:*`)
+        .join(' & ');
+
+      // Use text search with combined conditions
+      query = query.or([
+        `title.ilike.%${normalizedQuery}%`,
+        `description.ilike.%${normalizedQuery}%`
+      ])
+      .order('created_at', { ascending: false });
     }
 
     // Get total count first
@@ -151,12 +166,17 @@ async function getStoredResults(supabase: any, userId: string, page: number = 1,
 
     // Add search filter if searchQuery is provided
     if (searchQuery?.trim()) {
-      query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+      const normalizedQuery = searchQuery.trim().toLowerCase();
+      
+      query = query.or([
+        `title.ilike.%${normalizedQuery}%`,
+        `description.ilike.%${normalizedQuery}%`
+      ])
+      .order('created_at', { ascending: false });
     }
 
-    // Add pagination and ordering
+    // Add pagination
     const { data, error } = await query
-      .order('created_at', { ascending: false })
       .range((page - 1) * pageSize, page * pageSize - 1);
 
     if (error) {
