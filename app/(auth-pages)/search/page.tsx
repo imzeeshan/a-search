@@ -1,11 +1,10 @@
 'use client';
 
 import { Search, ChevronDown } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { createClient } from '@/utils/supabase/client';
+import { useState, useEffect, useTransition, useActionState } from 'react';
+import { search } from '@/app/actions/search';
 
-// Define types for search results
-type SearchResultType = {
+type SearchResult = {
   id: string;
   title: string;
   description: string;
@@ -168,7 +167,7 @@ const Pagination = ({ pagination, onPageChange }: { pagination: PaginationType, 
 };
 
 // Search results container component
-const SearchResults = ({ results, pagination, onPageChange }: { results: SearchResultType[], pagination?: PaginationType, onPageChange?: (page: number) => void }) => {
+const SearchResults = ({ results, pagination, onPageChange }: { results: SearchResult[], pagination?: PaginationType, onPageChange?: (page: number) => void }) => {
   return (
     <div className="w-[600px] max-w-full px-4 mb-10">
       <div className="flex justify-between items-center mb-4">
@@ -207,63 +206,56 @@ const SearchResults = ({ results, pagination, onPageChange }: { results: SearchR
   );
 };
 
-export default function Home() {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResultType[]>([]);
-  const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState<PaginationType>({
+const initialState = {
+  results: [],
+  pagination: {
     currentPage: 1,
     totalPages: 1,
     pageSize: 10,
     totalItems: 0,
     hasNextPage: false,
     hasPreviousPage: false
-  });
+  }
+};
+
+export default function Home() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isPending, startTransition] = useTransition();
+  const [state, formAction] = useActionState(search, initialState);
 
   // Handle search form submission
-  const handleSearch = async (e: React.FormEvent | null) => {
-    if (e) {
-      e.preventDefault();
-      setCurrentPage(1); // Reset to page 1 for new searches
-    }
+  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setIsLoading(true);
     setSearchAgentActions(defaultSearchAgentActions);
-
-    try {
-      const response = await fetch('/api/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          searchQuery: searchQuery.trim(),
-          page: currentPage,
-          pageSize: 10
-        }),
-      });
-
-      const data = await response.json();
-      setSearchResults(data.results);
-      setPagination(data.pagination);
-      setSearchAgentActions([...defaultSearchAgentActions, 
-        searchQuery.trim() 
-          ? `Found ${data.results.length} resources across educational platforms` 
-          : `Found ${data.pagination.totalItems} resources in your library`
-      ]);
-    } catch (error) {
-      console.error('Search error:', error);
-      setSearchAgentActions([...searchAgentActions, 'An error occurred while searching']);
-    } finally {
-      setIsLoading(false);
-    }
+    
+    const formData = new FormData(e.currentTarget);
+    formData.set('searchQuery', searchQuery);
+    formData.set('page', '1');
+    formData.set('pageSize', '10');
+    
+    startTransition(() => {
+      formAction(formData);
+    });
+    
+    setIsLoading(false);
   };
   
   // Handle page change
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
-    handleSearch(null);
+    const formData = new FormData();
+    formData.set('searchQuery', searchQuery);
+    formData.set('page', newPage.toString());
+    formData.set('pageSize', '10');
+    
+    startTransition(() => {
+      formAction(formData);
+    });
+    
     // Scroll to top of results
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -272,21 +264,39 @@ export default function Home() {
   const handleClearSearch = () => {
     setSearchQuery('');
     setCurrentPage(1);
-    handleSearch(null);
+    const formData = new FormData();
+    formData.set('searchQuery', '');
+    formData.set('page', '1');
+    formData.set('pageSize', '10');
+    
+    startTransition(() => {
+      formAction(formData);
+    });
   };
 
   useEffect(() => {
-    handleSearch(null); // Load initial results
+    // Load initial results
+    const formData = new FormData();
+    formData.set('searchQuery', '');
+    formData.set('page', '1');
+    formData.set('pageSize', '10');
+    
+    startTransition(() => {
+      formAction(formData);
+    });
   }, []);
+
+  const isSearching = isLoading || isPending;
 
   return (
     <div className="flex flex-col items-center w-[600px] max-w-full mx-auto">
       <div className="px-4 flex-1 w-full mb-2">
         {/* Search bar - alone on top row */}
-        <form onSubmit={handleSearch} className="w-full">
+        <form action={formAction} onSubmit={handleSearch} className="w-full">
           <div className="flex items-center bg-[#f2f2f7] rounded-lg shadow-sm border border-[#e5e5ea] transition-all duration-200 focus-within:ring-1 focus-within:ring-[#8e8e93] overflow-hidden mb-2">
             <input
               type="text"
+              name="searchQuery"
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -303,65 +313,67 @@ export default function Home() {
             )}
             <button
               type="submit"
-              disabled={isLoading}
-              className={`${isLoading ? 'bg-[#8e8e93]' : 'bg-[#1c1c1e]'} text-white w-12 h-12 flex items-center justify-center hover:bg-[#3a3a3c] transition duration-200`}
+              disabled={isSearching}
+              className={`${isSearching ? 'bg-[#8e8e93]' : 'bg-[#1c1c1e]'} text-white w-12 h-12 flex items-center justify-center hover:bg-[#3a3a3c] transition duration-200`}
             >
               <Search className="w-5 h-5" />
             </button>
           </div>
+          <input type="hidden" name="page" value={currentPage} />
+          <input type="hidden" name="pageSize" value="10" />
         </form>
           
-          {/* Grade Selector - moved below search bar, aligned left, smaller */}
-          <div className="flex justify-start mb-6">
-            <div className="relative">
-              <select 
-                defaultValue="all"
-                className="appearance-none h-8 pl-3 pr-8 bg-[#f2f2f7] rounded-md text-sm text-[#1c1c1e] border border-[#e5e5ea] focus:outline-none focus:ring-1 focus:ring-[#8e8e93]"
-              >
-                {gradeOptions.map((grade) => (
-                  <option key={grade.id} value={grade.value}>
-                    {grade.label}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-                <ChevronDown className="w-3 h-3 text-[#8e8e93]" />
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Search agent actions area */}
-        <div className="w-[600px] max-w-full px-4 mb-10">
-          <div className="rounded-lg border border-[#e5e5ea] bg-white p-4 shadow-sm">
-            <h3 className="text-lg font-medium mb-3 text-[#1c1c1e]">Astral is looking for resources...</h3>
-            <div className="space-y-2.5">
-              {searchAgentActions.map((action, index) => (
-                <div key={index} className="text-[#3a3a3c] text-sm border-l-2 border-gray-200 pl-3 py-0.5">
-                  {action}
-                </div>
+        {/* Grade Selector - moved below search bar, aligned left, smaller */}
+        <div className="flex justify-start mb-6">
+          <div className="relative">
+            <select 
+              defaultValue="all"
+              className="appearance-none h-8 pl-3 pr-8 bg-[#f2f2f7] rounded-md text-sm text-[#1c1c1e] border border-[#e5e5ea] focus:outline-none focus:ring-1 focus:ring-[#8e8e93]"
+            >
+              {gradeOptions.map((grade) => (
+                <option key={grade.id} value={grade.value}>
+                  {grade.label}
+                </option>
               ))}
+            </select>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+              <ChevronDown className="w-3 h-3 text-[#8e8e93]" />
             </div>
           </div>
         </div>
+      </div>
         
-        {/* Search results section */}
-        {/* Loading indicator */}
-        {isLoading && (
-          <div className="flex flex-col justify-center items-center py-8 space-y-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-            <p className="text-gray-600 text-sm animate-pulse">Searching across educational resources...</p>
+      {/* Search agent actions area */}
+      <div className="w-[600px] max-w-full px-4 mb-10">
+        <div className="rounded-lg border border-[#e5e5ea] bg-white p-4 shadow-sm">
+          <h3 className="text-lg font-medium mb-3 text-[#1c1c1e]">Astral is looking for resources...</h3>
+          <div className="space-y-2.5">
+            {searchAgentActions.map((action, index) => (
+              <div key={index} className="text-[#3a3a3c] text-sm border-l-2 border-gray-200 pl-3 py-0.5">
+                {action}
+              </div>
+            ))}
           </div>
-        )}
+        </div>
+      </div>
         
-        {/* Search Results */}
-        {!isLoading && searchResults.length > 0 && (
-          <SearchResults 
-            results={searchResults} 
-            pagination={pagination} 
-            onPageChange={handlePageChange} 
-          />
-        )}
+      {/* Search results section */}
+      {/* Loading indicator */}
+      {isSearching && (
+        <div className="flex flex-col justify-center items-center py-8 space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <p className="text-gray-600 text-sm animate-pulse">Searching across educational resources...</p>
+        </div>
+      )}
+        
+      {/* Search Results */}
+      {!isSearching && state.results.length > 0 && (
+        <SearchResults 
+          results={state.results} 
+          pagination={state.pagination} 
+          onPageChange={handlePageChange} 
+        />
+      )}
     </div>
   );
 }
