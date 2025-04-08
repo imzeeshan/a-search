@@ -244,7 +244,7 @@ export default function Home() {
           .limit(10);
 
         if (data && !error) {
-          setSearchResults(data.map(result => ({
+          setAllSearchResults(data.map(result => ({
             id: result.id,
             title: result.title,
             description: result.description || '',
