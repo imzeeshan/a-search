@@ -30,6 +30,12 @@ type SearchResponse = {
   pagination: PaginationType;
 };
 
+type SearchState = {
+  results: SearchResult[];
+  pagination: PaginationType;
+  pending?: boolean;
+};
+
 // Default pagination values
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
@@ -222,9 +228,8 @@ async function storeResults(results: any[], userId: string, supabase: any) {
 }
 
 export async function search(
-  _prevState: any,
   formData: FormData
-): Promise<SearchResponse> {
+): Promise<SearchState> {
   const searchQuery = (formData.get('searchQuery') as string)?.trim();
   const page = Number(formData.get('page')) || DEFAULT_PAGE;
   const pageSize = Number(formData.get('pageSize')) || DEFAULT_PAGE_SIZE;
@@ -263,6 +268,7 @@ export async function search(
       totalItems,
       hasNextPage: page < Math.ceil(totalItems / pageSize),
       hasPreviousPage: page > 1
-    }
+    },
+    pending: false
   };
 }
