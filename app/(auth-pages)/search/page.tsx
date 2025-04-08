@@ -240,7 +240,11 @@ export default function Home() {
           .from('search_results')
           .select('*')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
+          .textSearch('search_vector', searchQuery, {
+            type: 'websearch',
+            config: 'english'
+          })
+          .order('ts_rank(search_vector, websearch_to_tsquery(\'english\', ?))' as any, { ascending: false, foreignTable: 'search_results', referencedTable: searchQuery })
           .limit(10);
 
         if (data && !error) {

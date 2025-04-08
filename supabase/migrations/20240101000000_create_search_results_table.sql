@@ -33,6 +33,15 @@ create table search_results (
   unique(title, source, user_id)
 );
 
+-- Add text search vector column
+alter table search_results add column search_vector tsvector generated always as (
+  setweight(to_tsvector('english', coalesce(title, '')), 'A') ||
+  setweight(to_tsvector('english', coalesce(description, '')), 'B')
+) stored;
+
+-- Create GIN index for full text search
+create index search_results_search_idx on search_results using gin(search_vector);
+
 -- Create indexes for frequently queried fields
 create index search_results_user_id_idx on search_results(user_id);
 create index search_results_type_idx on search_results(type);
