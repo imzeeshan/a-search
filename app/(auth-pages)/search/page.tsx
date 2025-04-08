@@ -229,19 +229,23 @@ export default function Home() {
   // Handle search form submission
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Don't search if query is empty
+    if (!searchQuery?.trim()) {
+      return;
+    }
+
     setIsLoading(true);
     setSearchAgentActions(defaultSearchAgentActions);
     
     const formData = new FormData(e.currentTarget);
-    formData.set('searchQuery', searchQuery);
+    formData.set('searchQuery', searchQuery.trim());
     formData.set('page', '1');
     formData.set('pageSize', '10');
     
     startTransition(() => {
       formAction(formData);
     });
-    
-    setIsLoading(false);
   };
   
   // Handle page change

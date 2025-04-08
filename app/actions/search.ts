@@ -212,7 +212,7 @@ export async function search(
   _prevState: any,
   formData: FormData
 ): Promise<SearchResponse> {
-  const searchQuery = formData.get('searchQuery') as string;
+  const searchQuery = (formData.get('searchQuery') as string)?.trim();
   const page = Number(formData.get('page')) || DEFAULT_PAGE;
   const pageSize = Number(formData.get('pageSize')) || DEFAULT_PAGE_SIZE;
 
@@ -223,8 +223,8 @@ export async function search(
     throw new Error('Not authenticated');
   }
 
-  // For explicit searches, execute searches in parallel and store results
-  if (searchQuery?.trim()) {
+  // Only search and store results if there's a non-empty search query
+  if (searchQuery) {
     const [pbsResults, ck12Results] = await Promise.all([
       searchPBS(searchQuery),
       searchCK12(searchQuery)
