@@ -84,6 +84,34 @@ export default function Home() {
 
   const isSearching = isPending;
 
+  // Load last search query from URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const lastQuery = params.get('q') || '';
+    if (lastQuery) {
+      setSearchQuery(lastQuery);
+      const formData = new FormData();
+      formData.set('searchQuery', lastQuery);
+      formData.set('page', '1');
+      formData.set('pageSize', '10');
+      startTransition(() => {
+        dispatch(formData);
+      });
+    }
+  }, []);
+
+  // Update URL when search query changes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (searchQuery) {
+      params.set('q', searchQuery);
+    } else {
+      params.delete('q');
+    }
+    const newUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}`;
+    window.history.replaceState({}, '', newUrl);
+  }, [searchQuery]);
+
   // Handle search form submission
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
