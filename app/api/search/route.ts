@@ -322,7 +322,7 @@ export async function POST(request: Request) {
     }
 
     // Execute searches in parallel but don't wait for completion
-    const [pbsResults, ck12Results, khanResults] = await Promise.all([
+    const [pbsResults, ck12Results] = await Promise.all([
       searchPBS(searchQuery).catch(err => {
         console.error('PBS search error:', err);
         return [];
@@ -331,10 +331,10 @@ export async function POST(request: Request) {
         console.error('CK12 search error:', err);
         return [];
       }),
-      searchKhanAcademy(searchQuery).catch(err => {
-        console.error('Khan Academy search error:', err);
-        return [];
-      })
+      // searchKhanAcademy(searchQuery).catch(err => {
+      //   console.error('Khan Academy search error:', err);
+      //   return [];
+      // })
     ]);
 
     // Store the results asynchronously without waiting
@@ -352,7 +352,7 @@ export async function POST(request: Request) {
     // Return results immediately
     // const allResults = [...pbsResults, ...ck12Results, ...khanResults];
     const allResults = [...pbsResults, ...ck12Results];
-    
+
     return new Response(JSON.stringify({ results: allResults }), {
       headers: { 'Content-Type': 'application/json' }
     });
