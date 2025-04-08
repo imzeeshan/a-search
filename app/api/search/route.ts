@@ -145,15 +145,15 @@ async function searchKhanAcademy(query: string) {
 
     await browser.close();
 
-    const transformedResults = results.map(item => ({
-      title: item.title,
+    const transformedResults = results.map(item => item ? ({
+      title: item.title || '',
       description: item.description || '',
       image_url: item.image_url || '',
       link: item.link || '',
-      type: item.type,
+      type: item.type || 'Article',
       source: 'Khan Academy',
       user_id: user.id
-    }));
+    }) : null).filter(Boolean) as any[];
 
     const storedResults = [];
     for (const result of transformedResults) {
