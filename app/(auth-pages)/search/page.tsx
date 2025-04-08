@@ -244,7 +244,7 @@ export default function Home() {
             type: 'websearch',
             config: 'english'
           })
-          .order('ts_rank(search_vector, websearch_to_tsquery(\'english\', ?))' as any, { ascending: false, foreignTable: 'search_results' })
+          .order(`ts_rank(search_vector, websearch_to_tsquery('english', ${searchQuery}))` as any, { ascending: false, foreignTable: 'search_results' })
           .limit(10);
 
         if (data && !error) {
@@ -263,6 +263,7 @@ export default function Home() {
     };
 
     fetchLatestSearchResults();
+    handleSearch(null); // Trigger search on page load
   }, []);
 
   const handleSearch = async (e: React.FormEvent | null) => {
