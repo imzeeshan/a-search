@@ -347,26 +347,27 @@ export default function Home() {
         </div>
       </div>
         
-      {/* Search agent actions area */}
-      <div className="w-[600px] max-w-full px-4 mb-10">
-        <div className="rounded-lg border border-[#e5e5ea] bg-white p-4 shadow-sm">
-          <h3 className="text-lg font-medium mb-3 text-[#1c1c1e]">Astral is looking for resources...</h3>
-          <div className="space-y-2.5">
-            {searchAgentActions.map((action, index) => (
-              <div key={index} className="text-[#3a3a3c] text-sm border-l-2 border-gray-200 pl-3 py-0.5">
-                {action}
-              </div>
-            ))}
+      {/* Search agent actions area - only show when searching and no results */}
+      {isSearching && !state.results.length && (
+        <div className="w-[600px] max-w-full px-4 mb-10">
+          <div className="rounded-lg border border-[#e5e5ea] bg-white p-4 shadow-sm">
+            <h3 className="text-lg font-medium mb-3 text-[#1c1c1e]">Astral is looking for resources...</h3>
+            <div className="space-y-2.5">
+              {searchAgentActions.map((action, index) => (
+                <div key={index} className="text-[#3a3a3c] text-sm border-l-2 border-gray-200 pl-3 py-0.5">
+                  {action}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
         
-      {/* Search results section */}
-      {/* Loading indicator */}
-      {isSearching && (
+      {/* Loading indicator - show when searching with results */}
+      {isSearching && state.results.length > 0 && (
         <div className="flex flex-col justify-center items-center py-8 space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          <p className="text-gray-600 text-sm animate-pulse">Searching across educational resources...</p>
+          <p className="text-gray-600 text-sm animate-pulse">Loading more resources...</p>
         </div>
       )}
         
