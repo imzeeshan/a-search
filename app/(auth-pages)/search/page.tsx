@@ -220,34 +220,24 @@ const initialState = {
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
   const [isPending, startTransition] = useTransition();
   const [state, formAction] = useActionState(search, initialState);
+  const isLoading = state.pending;
 
   // Handle search form submission
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    
-    // Don't search if query is empty
-    if (!searchQuery?.trim()) {
-      return;
-    }
-
-    setIsLoading(true);
-    setSearchAgentActions(defaultSearchAgentActions);
-    
     const formData = new FormData(e.currentTarget);
-    formData.set('searchQuery', searchQuery.trim());
-    formData.set('page', '1');
-    formData.set('pageSize', '10');
+    formData.set('page', '1'); // Reset to first page on new search
+    setCurrentPage(1);
     
     startTransition(() => {
       formAction(formData);
     });
   };
-  
+
   // Handle page change
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
@@ -259,9 +249,6 @@ export default function Home() {
     startTransition(() => {
       formAction(formData);
     });
-    
-    // Scroll to top of results
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Clear search
@@ -296,7 +283,7 @@ export default function Home() {
     <div className="flex flex-col items-center w-[600px] max-w-full mx-auto">
       <div className="px-4 flex-1 w-full mb-2">
         {/* Search bar - alone on top row */}
-        <form action={formAction} onSubmit={handleSearch} className="w-full">
+        <form onSubmit={handleSearch} className="w-full">
           <div className="flex items-center bg-[#f2f2f7] rounded-lg shadow-sm border border-[#e5e5ea] transition-all duration-200 focus-within:ring-1 focus-within:ring-[#8e8e93] overflow-hidden mb-2">
             <input
               type="text"
@@ -367,7 +354,7 @@ export default function Home() {
       )}
         
       {/* Search Results */}
-      {!isSearching && state.results.length > 0 && (
+      {!isSearching && state && state.results && state.results.length > 0 && (
         <SearchResults 
           results={state.results} 
           pagination={state.pagination} 

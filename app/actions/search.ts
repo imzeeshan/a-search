@@ -133,26 +133,19 @@ async function getStoredResults(supabase: any, userId: string, page: number = 1,
     let query = supabase
       .from('search_results')
       .select('*', { count: 'exact' })
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false }); // Always order by created_at desc
 
     // Add search filter if searchQuery is provided
     if (searchQuery?.trim()) {
       // Create a normalized search query
       const normalizedQuery = searchQuery.trim().toLowerCase();
       
-      // Create a tsquery compatible string (handle multiple words)
-      const tsQuery = normalizedQuery
-        .split(/\s+/)
-        .filter(word => word.length > 0)
-        .map(word => `${word}:*`)
-        .join(' & ');
-
       // Use text search with combined conditions
       query = query.or([
         `title.ilike.%${normalizedQuery}%`,
         `description.ilike.%${normalizedQuery}%`
-      ])
-      .order('created_at', { ascending: false });
+      ]);
     }
 
     // Get total count first
@@ -162,7 +155,8 @@ async function getStoredResults(supabase: any, userId: string, page: number = 1,
     query = supabase
       .from('search_results')
       .select('*')
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false }); // Always order by created_at desc
 
     // Add search filter if searchQuery is provided
     if (searchQuery?.trim()) {
@@ -171,8 +165,7 @@ async function getStoredResults(supabase: any, userId: string, page: number = 1,
       query = query.or([
         `title.ilike.%${normalizedQuery}%`,
         `description.ilike.%${normalizedQuery}%`
-      ])
-      .order('created_at', { ascending: false });
+      ]);
     }
 
     // Add pagination
@@ -245,6 +238,7 @@ export async function search(
 
   // Only search and store results if there's a non-empty search query
   if (searchQuery) {
+    console.log("Fetching new results for query:", searchQuery);
     const [pbsResults, ck12Results] = await Promise.all([
       searchPBS(searchQuery),
       searchCK12(searchQuery)
@@ -256,7 +250,7 @@ export async function search(
 
   // Get paginated results from database (either all results or filtered by search)
   const { results, totalItems } = await getStoredResults(supabase, user.id, page, pageSize, searchQuery);
-  const totalPages = Math.ceil(totalItems / pageSize);
+  console.log(`Retrieved ${results.length} results from database`);
 
   revalidatePath('/search');
 
@@ -264,10 +258,10 @@ export async function search(
     results,
     pagination: {
       currentPage: page,
-      totalPages,
+      totalPages: Math.ceil(totalItems / pageSize),
       pageSize,
       totalItems,
-      hasNextPage: page < totalPages,
+      hasNextPage: page < Math.ceil(totalItems / pageSize),
       hasPreviousPage: page > 1
     }
   };
