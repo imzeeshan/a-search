@@ -35,6 +35,7 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 
 async function searchPBS(query: string) {
+  console.log("PBS search query:", query);
   try {
     const response = await fetch(
       'https://www.pbslearningmedia.org/api/v2/search/?rank_by=recency&q='+query+'&start=0&facet_by=accessibility,additional_features,cp,cs,ct,grades,subject,language,media_type,duration'
@@ -67,6 +68,7 @@ async function searchPBS(query: string) {
 }
 
 async function searchCK12(query: string) {
+  console.log("CK12 search query:", query);
   try {
     const response = await fetch(
       'https://api-prod.ck12.org/flx/search/direct/modality?q='+query+'&pageNum=1&specialSearch=false&filters=false&ck12only=true&pageSize=10&includeEIDs=1&includeSpecialMatches=true&expirationAge=hourly'
