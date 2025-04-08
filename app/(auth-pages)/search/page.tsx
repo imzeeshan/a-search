@@ -80,7 +80,7 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchAgentActions] = useState(defaultSearchAgentActions);
   const [isPending, startTransition] = useTransition();
-  const [state, formAction] = useFormState(search, initialState);
+  const [state, formAction] = useFormState<SearchState, FormData>(search, initialState);
 
   const isSearching = isPending;
 
@@ -133,7 +133,7 @@ export default function Home() {
     startTransition(() => {
       formAction(formData);
     });
-  }, []);
+  }, [formAction]);
 
   // Search result component
   const SearchResult = ({ title, description, image, type, link }: { title: string; description: string; image: string; type: string; link: string }) => {

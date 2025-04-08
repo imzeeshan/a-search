@@ -228,6 +228,7 @@ async function storeResults(results: any[], userId: string, supabase: any) {
 }
 
 export async function search(
+  state: SearchState,
   formData: FormData
 ): Promise<SearchState> {
   const searchQuery = (formData.get('searchQuery') as string)?.trim();
