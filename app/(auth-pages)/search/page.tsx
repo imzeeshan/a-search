@@ -56,8 +56,7 @@ const gradeOptions: GradeOptionType[] = [
   { id: 13, label: "Grade 12", value: "12" },
 ];
 
-
-
+// Search result component
 const SearchResult = ({ title, description, image, type, link }: { title: string; description: string; image: string; type: string; link: string }) => {
   const placeholderImage = "https://picsum.photos/200";
   return (
@@ -172,7 +171,12 @@ const Pagination = ({ pagination, onPageChange }: { pagination: PaginationType, 
 const SearchResults = ({ results, pagination, onPageChange }: { results: SearchResultType[], pagination?: PaginationType, onPageChange?: (page: number) => void }) => {
   return (
     <div className="w-[600px] max-w-full px-4 mb-10">
-      <h2 className="text-xl font-medium mb-4">Results</h2>
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-medium">Results</h2>
+        <span className="text-sm text-gray-600">
+          {pagination ? `Showing ${(pagination.currentPage - 1) * pagination.pageSize + 1} - ${Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of ${pagination.totalItems}` : ''}
+        </span>
+      </div>
       <div>
         {results.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
@@ -192,7 +196,9 @@ const SearchResults = ({ results, pagination, onPageChange }: { results: SearchR
             ))}
             
             {pagination && onPageChange && pagination.totalPages > 1 && (
-              <Pagination pagination={pagination} onPageChange={onPageChange} />
+              <div className="mt-6 border-t pt-6">
+                <Pagination pagination={pagination} onPageChange={onPageChange} />
+              </div>
             )}
           </>
         )}
@@ -202,100 +208,50 @@ const SearchResults = ({ results, pagination, onPageChange }: { results: SearchR
 };
 
 export default function Home() {
-  const [searchQuery, setSearchQuery] = useState(
-    typeof window !== 'undefined' ? localStorage.getItem('lastSearchQuery') || 'Volcanoes' : 'Volcanoes'
-  );
+  const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [allSearchResults, setAllSearchResults] = useState<SearchResultType[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResultType[]>([]);
   const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const [pagination, setPagination] = useState<PaginationType>({
+    currentPage: 1,
+    totalPages: 1,
+    pageSize: 10,
+    totalItems: 0,
+    hasNextPage: false,
+    hasPreviousPage: false
+  });
 
-  // Compute pagination data
-  const totalItems = allSearchResults.length;
-  const totalPages = Math.ceil(totalItems / pageSize);
-  const startIndex = (currentPage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, totalItems);
-  
-  // Get current page results
-  const searchResults = allSearchResults.slice(startIndex, endIndex);
-  
-  // Compute pagination state
-  const pagination: PaginationType = {
-    currentPage,
-    totalPages,
-    pageSize,
-    totalItems,
-    hasNextPage: currentPage < totalPages,
-    hasPreviousPage: currentPage > 1
-  };
-
-  useEffect(() => {
-    const fetchLatestSearchResults = async () => {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (user) {
-        const { data, error } = await supabase
-          .from('search_results')
-          .select('*')
-          .eq('user_id', user.id)
-          .textSearch('search_vector', searchQuery, {
-            type: 'websearch',
-            config: 'english'
-          })
-          .order(`ts_rank(search_vector, websearch_to_tsquery('english', ${searchQuery}))` as any, { ascending: false, foreignTable: 'search_results' })
-          .limit(10);
-
-        if (data && !error) {
-          setAllSearchResults(data.map(result => ({
-            id: result.id,
-            title: result.title,
-            description: result.description || '',
-            image: result.image_url || '',
-            type: result.type,
-            source: result.source,
-            url: result.link,
-            created_at: result.created_at
-          })));
-        }
-      }
-    };
-
-    fetchLatestSearchResults();
-    handleSearch(null); // Trigger search on page load
-  }, []);
-
+  // Handle search form submission
   const handleSearch = async (e: React.FormEvent | null) => {
-    if (e) e.preventDefault();
-    setIsLoading(true);
-    setAllSearchResults([]);
-    setCurrentPage(1);
-    setSearchAgentActions([...defaultSearchAgentActions]);
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('lastSearchQuery', searchQuery);
+    if (e) {
+      e.preventDefault();
+      setCurrentPage(1); // Reset to page 1 for new searches
     }
+    setIsLoading(true);
+    setSearchAgentActions(defaultSearchAgentActions);
+
     try {
       const response = await fetch('/api/search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          searchQuery,
-          page: 1,
-          pageSize: 100 // Fetch more results at once
+        body: JSON.stringify({
+          searchQuery: searchQuery.trim(),
+          page: currentPage,
+          pageSize: 10
         }),
       });
 
       const data = await response.json();
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setAllSearchResults(data.results);
-      setSearchAgentActions([...defaultSearchAgentActions, `Found ${data.results.length} resources across educational platforms`]);
+      setSearchResults(data.results);
+      setPagination(data.pagination);
+      setSearchAgentActions([...defaultSearchAgentActions, 
+        searchQuery.trim() 
+          ? `Found ${data.results.length} resources across educational platforms` 
+          : `Found ${data.pagination.totalItems} resources in your library`
+      ]);
     } catch (error) {
       console.error('Search error:', error);
       setSearchAgentActions([...searchAgentActions, 'An error occurred while searching']);
@@ -307,32 +263,53 @@ export default function Home() {
   // Handle page change
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
+    handleSearch(null);
     // Scroll to top of results
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Clear search
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setCurrentPage(1);
+    handleSearch(null);
+  };
+
+  useEffect(() => {
+    handleSearch(null); // Load initial results
+  }, []);
 
   return (
     <div className="flex flex-col items-center w-[600px] max-w-full mx-auto">
       <div className="px-4 flex-1 w-full mb-2">
         {/* Search bar - alone on top row */}
         <form onSubmit={handleSearch} className="w-full">
-            <div className="flex items-center bg-[#f2f2f7] rounded-lg shadow-sm border border-[#e5e5ea] transition-all duration-200 focus-within:ring-1 focus-within:ring-[#8e8e93] overflow-hidden mb-2">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="flex-grow h-12 pl-4 bg-transparent text-base text-[#1c1c1e] placeholder:text-[#8e8e93] focus:outline-none"
-              />
+          <div className="flex items-center bg-[#f2f2f7] rounded-lg shadow-sm border border-[#e5e5ea] transition-all duration-200 focus-within:ring-1 focus-within:ring-[#8e8e93] overflow-hidden mb-2">
+            <input
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="flex-grow h-12 pl-4 bg-transparent text-base text-[#1c1c1e] placeholder:text-[#8e8e93] focus:outline-none"
+            />
+            {searchQuery && (
               <button
-                type="submit"
-                disabled={isLoading}
-                className={`${isLoading ? 'bg-[#8e8e93]' : 'bg-[#1c1c1e]'} text-white w-12 h-12 flex items-center justify-center hover:bg-[#3a3a3c] transition duration-200`}
+                type="button"
+                onClick={handleClearSearch}
+                className="px-3 text-[#8e8e93] hover:text-[#3a3a3c]"
               >
-                <Search className="w-5 h-5" />
+                Clear
               </button>
-            </div>
-          </form>
+            )}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`${isLoading ? 'bg-[#8e8e93]' : 'bg-[#1c1c1e]'} text-white w-12 h-12 flex items-center justify-center hover:bg-[#3a3a3c] transition duration-200`}
+            >
+              <Search className="w-5 h-5" />
+            </button>
+          </div>
+        </form>
           
           {/* Grade Selector - moved below search bar, aligned left, smaller */}
           <div className="flex justify-start mb-6">
@@ -385,6 +362,6 @@ export default function Home() {
             onPageChange={handlePageChange} 
           />
         )}
-      </div>
-    );
+    </div>
+  );
 }

@@ -19,6 +19,7 @@ type SearchResult = {
 };
 
 async function searchPBS(query: string) {
+
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -315,63 +316,105 @@ async function searchCK12(query: string) {
   }
 }
 
+async function getStoredResults(supabase: any, userId: string, page: number = 1, pageSize: number = 10, searchQuery?: string) {
+  try {
+    let query = supabase
+      .from('search_results')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId);
+
+    // Add search filter if searchQuery is provided
+    if (searchQuery?.trim()) {
+      query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+    }
+
+    // Get total count first
+    const { count } = await query;
+
+    // Then get paginated results with the same filters
+    query = supabase
+      .from('search_results')
+      .select('*')
+      .eq('user_id', userId);
+
+    // Add search filter if searchQuery is provided
+    if (searchQuery?.trim()) {
+      query = query.or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+    }
+
+    // Add pagination and ordering
+    const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
+
+    if (error) {
+      console.error('Error fetching stored results:', error);
+      return { results: [], totalItems: 0 };
+    }
+
+    return {
+      results: data.map((result: any) => ({
+        id: result.id,
+        title: result.title,
+        description: result.description || '',
+        image: result.image_url || '',
+        type: result.type,
+        source: result.source,
+        url: result.link,
+        created_at: result.created_at
+      })),
+      totalItems: count
+    };
+  } catch (error) {
+    console.error('Error fetching stored results:', error);
+    return { results: [], totalItems: 0 };
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { searchQuery, page = DEFAULT_PAGE, pageSize = DEFAULT_PAGE_SIZE } = await request.json();
-    if (!searchQuery) {
-      return new Response(JSON.stringify({ error: 'Search query is required' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
     
     // Ensure page and pageSize are numbers
     const currentPage = Number(page);
     const itemsPerPage = Number(pageSize);
 
-    // Execute searches in parallel but don't wait for completion
-    const [pbsResults, ck12Results] = await Promise.all([
-      searchPBS(searchQuery).catch(err => {
-        console.error('PBS search error:', err);
-        return [];
-      }),
-      searchCK12(searchQuery).catch(err => {
-        console.error('CK12 search error:', err);
-        return [];
-      }),
-      // searchKhanAcademy(searchQuery).catch(err => {
-      //   console.error('Khan Academy search error:', err);
-      //   return [];
-      // })
-    ]);
-
-    // Store the results asynchronously without waiting
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      // Store results in background without waiting
-      Promise.all([
+    
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'User not authenticated' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    // For explicit searches, execute searches in parallel and store results
+    if (searchQuery?.trim()) {
+      const [pbsResults, ck12Results] = await Promise.all([
+        searchPBS(searchQuery).catch(err => {
+          console.error('PBS search error:', err);
+          return [];
+        }),
+        searchCK12(searchQuery).catch(err => {
+          console.error('CK12 search error:', err);
+          return [];
+        }),
+      ]);
+
+      // Store results in background
+      await Promise.all([
         storeResults(pbsResults, user.id, supabase),
         storeResults(ck12Results, user.id, supabase),
-        // storeResults(khanResults, user.id, supabase)
       ]).catch(err => console.error('Error storing results:', err));
     }
 
-    // Return results immediately with pagination
-    // const allResults = [...pbsResults, ...ck12Results, ...khanResults];
-    const allResults = [...pbsResults, ...ck12Results];
-    
-    // Calculate pagination metadata
-    const totalItems = allResults.length;
+    // Get paginated results from database (either all results or filtered by search)
+    const { results, totalItems } = await getStoredResults(supabase, user.id, currentPage, itemsPerPage, searchQuery);
     const totalPages = Math.ceil(totalItems / itemsPerPage);
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
-    
-    // Get the current page of results
-    const paginatedResults = allResults.slice(startIndex, endIndex);
 
     return new Response(JSON.stringify({
-      results: paginatedResults,
+      results,
       pagination: {
         currentPage,
         totalPages,
