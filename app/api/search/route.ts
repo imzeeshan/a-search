@@ -345,12 +345,14 @@ export async function POST(request: Request) {
       Promise.all([
         storeResults(pbsResults, user.id, supabase),
         storeResults(ck12Results, user.id, supabase),
-        storeResults(khanResults, user.id, supabase)
+        // storeResults(khanResults, user.id, supabase)
       ]).catch(err => console.error('Error storing results:', err));
     }
 
     // Return results immediately
-    const allResults = [...pbsResults, ...ck12Results, ...khanResults];
+    // const allResults = [...pbsResults, ...ck12Results, ...khanResults];
+    const allResults = [...pbsResults, ...ck12Results];
+    
     return new Response(JSON.stringify({ results: allResults }), {
       headers: { 'Content-Type': 'application/json' }
     });
