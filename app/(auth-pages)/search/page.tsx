@@ -206,16 +206,29 @@ export default function Home() {
     typeof window !== 'undefined' ? localStorage.getItem('lastSearchQuery') || 'Volcanoes' : 'Volcanoes'
   );
   const [isLoading, setIsLoading] = useState(false);
-  const [searchResults, setSearchResults] = useState<SearchResultType[]>([]);
+  const [allSearchResults, setAllSearchResults] = useState<SearchResultType[]>([]);
   const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
-  const [pagination, setPagination] = useState<PaginationType>({
-    currentPage: 1,
-    totalPages: 1,
-    pageSize: 10,
-    totalItems: 0,
-    hasNextPage: false,
-    hasPreviousPage: false
-  });
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+
+  // Compute pagination data
+  const totalItems = allSearchResults.length;
+  const totalPages = Math.ceil(totalItems / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+  
+  // Get current page results
+  const searchResults = allSearchResults.slice(startIndex, endIndex);
+  
+  // Compute pagination state
+  const pagination: PaginationType = {
+    currentPage,
+    totalPages,
+    pageSize,
+    totalItems,
+    hasNextPage: currentPage < totalPages,
+    hasPreviousPage: currentPage > 1
+  };
 
   useEffect(() => {
     const fetchLatestSearchResults = async () => {
@@ -248,10 +261,11 @@ export default function Home() {
     fetchLatestSearchResults();
   }, []);
 
-  const handleSearch = async (e: React.FormEvent | null, page = 1) => {
+  const handleSearch = async (e: React.FormEvent | null) => {
     if (e) e.preventDefault();
     setIsLoading(true);
-    setSearchResults([]);
+    setAllSearchResults([]);
+    setCurrentPage(1);
     setSearchAgentActions([...defaultSearchAgentActions]);
 
     if (typeof window !== 'undefined') {
@@ -265,8 +279,8 @@ export default function Home() {
         },
         body: JSON.stringify({ 
           searchQuery,
-          page,
-          pageSize: pagination.pageSize
+          page: 1,
+          pageSize: 100 // Fetch more results at once
         }),
       });
 
@@ -275,9 +289,8 @@ export default function Home() {
         throw new Error(data.error);
       }
 
-      setSearchResults(data.results);
-      setPagination(data.pagination);
-      setSearchAgentActions([...defaultSearchAgentActions, `Found ${data.pagination.totalItems} resources across educational platforms (Page ${data.pagination.currentPage} of ${data.pagination.totalPages})`]);
+      setAllSearchResults(data.results);
+      setSearchAgentActions([...defaultSearchAgentActions, `Found ${data.results.length} resources across educational platforms`]);
     } catch (error) {
       console.error('Search error:', error);
       setSearchAgentActions([...searchAgentActions, 'An error occurred while searching']);
@@ -288,7 +301,7 @@ export default function Home() {
   
   // Handle page change
   const handlePageChange = (newPage: number) => {
-    handleSearch(null, newPage);
+    setCurrentPage(newPage);
     // Scroll to top of results
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
