@@ -17,6 +17,15 @@ type SearchResultType = {
   created_at: string;
 };
 
+type PaginationType = {
+  currentPage: number;
+  totalPages: number;
+  pageSize: number;
+  totalItems: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
 // Define type for grade options
 type GradeOptionType = {
   id: number;
@@ -74,8 +83,93 @@ const SearchResult = ({ title, description, image, type, link }: { title: string
   );
 };
 
+// Pagination component
+const Pagination = ({ pagination, onPageChange }: { pagination: PaginationType, onPageChange: (page: number) => void }) => {
+  const { currentPage, totalPages, hasNextPage, hasPreviousPage } = pagination;
+  
+  // Generate page numbers to display
+  const getPageNumbers = () => {
+    const pages = [];
+    const maxPagesToShow = 5;
+    
+    if (totalPages <= maxPagesToShow) {
+      // Show all pages if total pages is less than or equal to maxPagesToShow
+      for (let i = 1; i <= totalPages; i++) {
+        pages.push(i);
+      }
+    } else {
+      // Always show first page
+      pages.push(1);
+      
+      // Calculate start and end of page range around current page
+      let startPage = Math.max(2, currentPage - 1);
+      let endPage = Math.min(totalPages - 1, currentPage + 1);
+      
+      // Adjust if we're at the start or end
+      if (currentPage <= 2) {
+        endPage = Math.min(totalPages - 1, 4);
+      } else if (currentPage >= totalPages - 1) {
+        startPage = Math.max(2, totalPages - 3);
+      }
+      
+      // Add ellipsis if needed before startPage
+      if (startPage > 2) {
+        pages.push('...');
+      }
+      
+      // Add page numbers in range
+      for (let i = startPage; i <= endPage; i++) {
+        pages.push(i);
+      }
+      
+      // Add ellipsis if needed after endPage
+      if (endPage < totalPages - 1) {
+        pages.push('...');
+      }
+      
+      // Always show last page
+      if (totalPages > 1) {
+        pages.push(totalPages);
+      }
+    }
+    
+    return pages;
+  };
+  
+  return (
+    <div className="flex items-center justify-center space-x-2 my-6">
+      <button
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={!hasPreviousPage}
+        className={`px-3 py-1 rounded border ${!hasPreviousPage ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+      >
+        Previous
+      </button>
+      
+      {getPageNumbers().map((page, index) => (
+        <button
+          key={index}
+          onClick={() => typeof page === 'number' ? onPageChange(page) : null}
+          disabled={typeof page !== 'number'}
+          className={`w-8 h-8 flex items-center justify-center rounded ${typeof page !== 'number' ? 'cursor-default' : page === currentPage ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50 border'}`}
+        >
+          {page}
+        </button>
+      ))}
+      
+      <button
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={!hasNextPage}
+        className={`px-3 py-1 rounded border ${!hasNextPage ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+      >
+        Next
+      </button>
+    </div>
+  );
+};
+
 // Search results container component
-const SearchResults = ({ results }: { results: SearchResultType[] }) => {
+const SearchResults = ({ results, pagination, onPageChange }: { results: SearchResultType[], pagination?: PaginationType, onPageChange?: (page: number) => void }) => {
   return (
     <div className="w-[600px] max-w-full px-4 mb-10">
       <h2 className="text-xl font-medium mb-4">Results</h2>
@@ -85,16 +179,22 @@ const SearchResults = ({ results }: { results: SearchResultType[] }) => {
             No search results found. Try a different search term.
           </div>
         ) : (
-          results.map((result, index) => (
-            <SearchResult
-              key={`${result.id}-${result.source}-${index}`}
-              title={result.title}
-              description={result.description}
-              image={result.image}
-              type={result.type}
-              link={result.url}
-            />
-          ))
+          <>
+            {results.map((result, index) => (
+              <SearchResult
+                key={`${result.id}-${result.source}-${index}`}
+                title={result.title}
+                description={result.description}
+                image={result.image}
+                type={result.type}
+                link={result.url}
+              />
+            ))}
+            
+            {pagination && onPageChange && pagination.totalPages > 1 && (
+              <Pagination pagination={pagination} onPageChange={onPageChange} />
+            )}
+          </>
         )}
       </div>
     </div>
@@ -108,6 +208,14 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchResults, setSearchResults] = useState<SearchResultType[]>([]);
   const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
+  const [pagination, setPagination] = useState<PaginationType>({
+    currentPage: 1,
+    totalPages: 1,
+    pageSize: 10,
+    totalItems: 0,
+    hasNextPage: false,
+    hasPreviousPage: false
+  });
 
   useEffect(() => {
     const fetchLatestSearchResults = async () => {
@@ -140,8 +248,8 @@ export default function Home() {
     fetchLatestSearchResults();
   }, []);
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = async (e: React.FormEvent | null, page = 1) => {
+    if (e) e.preventDefault();
     setIsLoading(true);
     setSearchResults([]);
     setSearchAgentActions([...defaultSearchAgentActions]);
@@ -155,7 +263,11 @@ export default function Home() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ searchQuery }),
+        body: JSON.stringify({ 
+          searchQuery,
+          page,
+          pageSize: pagination.pageSize
+        }),
       });
 
       const data = await response.json();
@@ -164,13 +276,21 @@ export default function Home() {
       }
 
       setSearchResults(data.results);
-      setSearchAgentActions([...defaultSearchAgentActions, `Found ${data.results.length} resources across educational platforms`]);
+      setPagination(data.pagination);
+      setSearchAgentActions([...defaultSearchAgentActions, `Found ${data.pagination.totalItems} resources across educational platforms (Page ${data.pagination.currentPage} of ${data.pagination.totalPages})`]);
     } catch (error) {
       console.error('Search error:', error);
       setSearchAgentActions([...searchAgentActions, 'An error occurred while searching']);
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  // Handle page change
+  const handlePageChange = (newPage: number) => {
+    handleSearch(null, newPage);
+    // Scroll to top of results
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -241,7 +361,11 @@ export default function Home() {
         
         {/* Search Results */}
         {!isLoading && searchResults.length > 0 && (
-          <SearchResults results={searchResults} />
+          <SearchResults 
+            results={searchResults} 
+            pagination={pagination} 
+            onPageChange={handlePageChange} 
+          />
         )}
       </div>
     );

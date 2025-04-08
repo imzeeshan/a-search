@@ -2,6 +2,10 @@ import { createClient } from '../../../utils/supabase/server';
 import { NextResponse } from 'next/server';
 import puppeteer from 'puppeteer';
 
+// Pagination defaults
+const DEFAULT_PAGE_SIZE = 10;
+const DEFAULT_PAGE = 1;
+
 type SearchResult = {
   id: string;
   title: string;
@@ -313,13 +317,17 @@ async function searchCK12(query: string) {
 
 export async function POST(request: Request) {
   try {
-    const { searchQuery } = await request.json();
+    const { searchQuery, page = DEFAULT_PAGE, pageSize = DEFAULT_PAGE_SIZE } = await request.json();
     if (!searchQuery) {
       return new Response(JSON.stringify({ error: 'Search query is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
       });
     }
+    
+    // Ensure page and pageSize are numbers
+    const currentPage = Number(page);
+    const itemsPerPage = Number(pageSize);
 
     // Execute searches in parallel but don't wait for completion
     const [pbsResults, ck12Results] = await Promise.all([
@@ -349,11 +357,30 @@ export async function POST(request: Request) {
       ]).catch(err => console.error('Error storing results:', err));
     }
 
-    // Return results immediately
+    // Return results immediately with pagination
     // const allResults = [...pbsResults, ...ck12Results, ...khanResults];
     const allResults = [...pbsResults, ...ck12Results];
+    
+    // Calculate pagination metadata
+    const totalItems = allResults.length;
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = Math.min(startIndex + itemsPerPage, totalItems);
+    
+    // Get the current page of results
+    const paginatedResults = allResults.slice(startIndex, endIndex);
 
-    return new Response(JSON.stringify({ results: allResults }), {
+    return new Response(JSON.stringify({
+      results: paginatedResults,
+      pagination: {
+        currentPage,
+        totalPages,
+        pageSize: itemsPerPage,
+        totalItems,
+        hasNextPage: currentPage < totalPages,
+        hasPreviousPage: currentPage > 1
+      }
+    }), {
       headers: { 'Content-Type': 'application/json' }
     });
   } catch (error) {
