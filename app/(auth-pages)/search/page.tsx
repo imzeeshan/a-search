@@ -85,9 +85,9 @@ const SearchResults = ({ results }: { results: SearchResultType[] }) => {
             No search results found. Try a different search term.
           </div>
         ) : (
-          results.map((result) => (
+          results.map((result, index) => (
             <SearchResult
-              key={result.id}
+              key={`${result.id}-${result.source}-${index}`}
               title={result.title}
               description={result.description}
               image={result.image}
