@@ -206,7 +206,13 @@ const SearchResults = ({ results, pagination, onPageChange }: { results: SearchR
   );
 };
 
-const initialState = {
+type SearchState = {
+  results: SearchResult[];
+  pagination: PaginationType;
+  pending?: boolean;
+};
+
+const initialState: SearchState = {
   results: [],
   pagination: {
     currentPage: 1,
@@ -215,7 +221,8 @@ const initialState = {
     totalItems: 0,
     hasNextPage: false,
     hasPreviousPage: false
-  }
+  },
+  pending: false
 };
 
 export default function Home() {
@@ -223,8 +230,9 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchAgentActions, setSearchAgentActions] = useState(defaultSearchAgentActions);
   const [isPending, startTransition] = useTransition();
-  const [state, formAction] = useActionState(search, initialState);
-  const isLoading = state.pending;
+  const [state, formAction] = useActionState<SearchState>(search, initialState);
+
+  const isLoading = state?.pending || false;
 
   // Handle search form submission
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
