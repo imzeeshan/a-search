@@ -244,7 +244,7 @@ export default function Home() {
             type: 'websearch',
             config: 'english'
           })
-          .order('ts_rank(search_vector, websearch_to_tsquery(\'english\', ?))' as any, { ascending: false, foreignTable: 'search_results', referencedTable: searchQuery })
+          .order('ts_rank(search_vector, websearch_to_tsquery(\'english\', ?))' as any, { ascending: false, foreignTable: 'search_results' })
           .limit(10);
 
         if (data && !error) {
