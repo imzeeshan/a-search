@@ -1,9 +1,8 @@
 'use client';
 
 import { Search, ChevronDown } from 'lucide-react';
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useActionState } from 'react';
 import { search } from '@/app/actions/search';
-import { useFormState } from 'react-dom';
 
 type SearchResult = {
   id: string;
@@ -30,6 +29,7 @@ type SearchState = {
   results: SearchResult[];
   pagination: PaginationType;
   pending?: boolean;
+  groupedResults?: { source: string; items: SearchResult[]; count: number }[];
 };
 
 // Define type for grade options
@@ -80,19 +80,18 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchAgentActions] = useState(defaultSearchAgentActions);
   const [isPending, startTransition] = useTransition();
-  const [state, formAction] = useFormState<SearchState, FormData>(search, initialState);
+  const [state, dispatch] = useActionState(search, initialState);
 
   const isSearching = isPending;
 
   // Handle search form submission
-  const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     formData.set('page', '1'); // Reset to first page on new search
     setCurrentPage(1);
-    
     startTransition(() => {
-      formAction(formData);
+      dispatch(formData);
     });
   };
 
@@ -103,9 +102,8 @@ export default function Home() {
     formData.set('searchQuery', searchQuery);
     formData.set('page', newPage.toString());
     formData.set('pageSize', '10');
-    
     startTransition(() => {
-      formAction(formData);
+      dispatch(formData);
     });
   };
 
@@ -117,23 +115,21 @@ export default function Home() {
     formData.set('searchQuery', '');
     formData.set('page', '1');
     formData.set('pageSize', '10');
-    
     startTransition(() => {
-      formAction(formData);
+      dispatch(formData);
     });
   };
 
   useEffect(() => {
     // Load initial results
-    const formData = new FormData();
-    formData.set('searchQuery', '');
-    formData.set('page', '1');
-    formData.set('pageSize', '10');
-    
     startTransition(() => {
-      formAction(formData);
+      const formData = new FormData();
+      formData.set('searchQuery', '');
+      formData.set('page', '1');
+      formData.set('pageSize', '10');
+      dispatch(formData);
     });
-  }, [formAction]);
+  }, [dispatch]);
 
   // Search result component
   const SearchResult = ({ title, description, image, type, link }: { title: string; description: string; image: string; type: string; link: string }) => {
@@ -247,11 +243,48 @@ export default function Home() {
   };
 
   // Search results container component
-  const SearchResults = ({ results, pagination, onPageChange }: { results: SearchResult[], pagination?: PaginationType, onPageChange?: (page: number) => void }) => {
+  const SearchResults = ({ results, pagination, onPageChange, groupedResults }: { 
+    results: SearchResult[], 
+    pagination?: PaginationType, 
+    onPageChange?: (page: number) => void,
+    groupedResults?: { source: string; items: SearchResult[]; count: number }[]
+  }) => {
+    if (groupedResults) {
+      return (
+        <div className="w-[600px] max-w-full px-4 mb-10">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-medium">Your Learning Resources</h2>
+          </div>
+          <div>
+            {groupedResults.map(({ source, items, count }) => (
+              <div key={source} className="mb-8">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-medium text-gray-800">{source}</h3>
+                  <span className="text-sm text-gray-600">{count} resources</span>
+                </div>
+                <div className="space-y-4">
+                  {items.map((result, index) => (
+                    <SearchResult
+                      key={`${result.id}-${result.source}-${index}`}
+                      title={result.title}
+                      description={result.description}
+                      image={result.image}
+                      type={result.type}
+                      link={result.url}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="w-[600px] max-w-full px-4 mb-10">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-medium">Results</h2>
+          <h2 className="text-xl font-medium">Search Results</h2>
           <span className="text-sm text-gray-600">
             {pagination ? `Showing ${(pagination.currentPage - 1) * pagination.pageSize + 1} - ${Math.min(pagination.currentPage * pagination.pageSize, pagination.totalItems)} of ${pagination.totalItems}` : ''}
           </span>
@@ -290,7 +323,11 @@ export default function Home() {
     <div className="flex flex-col items-center w-[600px] max-w-full mx-auto">
       <div className="px-4 flex-1 w-full mb-2">
         {/* Search bar - alone on top row */}
-        <form onSubmit={handleSearch} className="w-full">
+        <form action={(formData: FormData) => {
+          startTransition(() => {
+            dispatch(formData);
+          });
+        }} className="w-full">
           <div className="flex items-center bg-[#f2f2f7] rounded-lg shadow-sm border border-[#e5e5ea] transition-all duration-200 focus-within:ring-1 focus-within:ring-[#8e8e93] overflow-hidden mb-2">
             <input
               type="text"
@@ -361,11 +398,12 @@ export default function Home() {
       )}
         
       {/* Search Results */}
-      {!isSearching && state && state.results && state.results.length > 0 && (
+      {!isSearching && state.results.length > 0 && (
         <SearchResults 
           results={state.results} 
           pagination={state.pagination} 
-          onPageChange={handlePageChange} 
+          onPageChange={handlePageChange}
+          groupedResults={state.groupedResults}
         />
       )}
     </div>

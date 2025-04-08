@@ -32,6 +32,7 @@ type SearchResponse = {
 
 type SearchState = {
   results: SearchResult[];
+  groupedResults?: { source: string; items: SearchResult[]; count: number }[];
   pagination: PaginationType;
   pending?: boolean;
 };
@@ -227,11 +228,29 @@ async function storeResults(results: any[], userId: string, supabase: any) {
   }
 }
 
+// Group results by source
+function groupResultsBySource(results: SearchResult[]) {
+  const grouped = results.reduce((acc, result) => {
+    const source = result.source;
+    if (!acc[source]) {
+      acc[source] = [];
+    }
+    acc[source].push(result);
+    return acc;
+  }, {} as Record<string, SearchResult[]>);
+
+  return Object.entries(grouped).map(([source, items]) => ({
+    source,
+    items,
+    count: items.length
+  }));
+}
+
 export async function search(
-  state: SearchState,
+  prevState: SearchState,
   formData: FormData
 ): Promise<SearchState> {
-  const searchQuery = (formData.get('searchQuery') as string)?.trim();
+  const searchQuery = formData.get('searchQuery') as string;
   const page = Number(formData.get('page')) || DEFAULT_PAGE;
   const pageSize = Number(formData.get('pageSize')) || DEFAULT_PAGE_SIZE;
 
@@ -242,8 +261,14 @@ export async function search(
     throw new Error('Not authenticated');
   }
 
+  // Return a pending state first
+  const pendingState: SearchState = {
+    ...prevState,
+    pending: true
+  };
+
   // Only search and store results if there's a non-empty search query
-  if (searchQuery) {
+  if (searchQuery?.trim()) {
     console.log("Fetching new results for query:", searchQuery);
     const [pbsResults, ck12Results] = await Promise.all([
       searchPBS(searchQuery),
@@ -258,10 +283,15 @@ export async function search(
   const { results, totalItems } = await getStoredResults(supabase, user.id, page, pageSize, searchQuery);
   console.log(`Retrieved ${results.length} results from database`);
 
+  // Group results by source if no specific search query
+  const groupedResults = !searchQuery?.trim() ? groupResultsBySource(results) : undefined;
+
   revalidatePath('/search');
 
+  // Return the final state
   return {
     results,
+    groupedResults,
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalItems / pageSize),
