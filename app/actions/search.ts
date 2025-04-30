@@ -1,7 +1,6 @@
 'use server';
 
 import { createClient } from '@/utils/supabase/server';
-import puppeteer from 'puppeteer';
 import { revalidatePath } from 'next/cache';
 
 type SearchResult = {
@@ -25,10 +24,6 @@ type PaginationType = {
   hasPreviousPage: boolean;
 };
 
-type SearchResponse = {
-  results: SearchResult[];
-  pagination: PaginationType;
-};
 
 type SearchState = {
   results: SearchResult[];
@@ -42,14 +37,30 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 10;
 
 async function searchPBS(query: string) {
-  console.log("PBS search query:", query);
   try {
     const response = await fetch(
       'https://www.pbslearningmedia.org/api/v2/search/?rank_by=recency&q='+query+'&start=0&facet_by=accessibility,additional_features,cp,cs,ct,grades,subject,language,media_type,duration'
     );
     const data = await response.json();
 
-    return data.objects.map((item: any) => {
+    type PBSMediaItem = {
+      media_type?: string[];
+      title: string;
+      description?: string;
+      poster_images?: { url: string }[];
+      canonical_url: string;
+    };
+
+    type PBSSearchResult = {
+      title: string;
+      description: string;
+      image_url: string;
+      link: string;
+      type: string;
+      source: string;
+    };
+
+    return data.objects.map((item: PBSMediaItem) => {
       let contentType = 'Article';
       if (item.media_type?.[0]?.toLowerCase().includes('video')) {
         contentType = 'Video';
@@ -66,7 +77,7 @@ async function searchPBS(query: string) {
         link: item.canonical_url,
         type: contentType,
         source: 'PBLearning'
-      };
+      } as PBSSearchResult;
     });
   } catch (error) {
     console.error('PBS search error:', error);
@@ -75,7 +86,6 @@ async function searchPBS(query: string) {
 }
 
 async function searchCK12(query: string) {
-  console.log("CK12 search query:", query);
   try {
     const response = await fetch(
       'https://api-prod.ck12.org/flx/search/direct/modality?q='+query+'&pageNum=1&specialSearch=false&filters=false&ck12only=true&pageSize=10&includeEIDs=1&includeSpecialMatches=true&expirationAge=hourly'
@@ -97,36 +107,64 @@ async function searchCK12(query: string) {
       return [];
     }
 
-    const transformedResults = Array.isArray(results) ? results.filter(item => item && item.title).map((item: any) => {
-      let contentType = 'Article';
-      
-      if (item.artifactType === 'lesson') {
-        contentType = 'Interactive Lesson';
-      } else if (item.artifactType === 'video' || (item.coverImage && item.coverImage.includes('video'))) {
-        contentType = 'Video';
-      } else if (item.artifactType === 'quiz' || item.artifactType === 'assessment') {
-        contentType = 'Quiz';
-      } else if (item.artifactType === 'worksheet') {
-        contentType = 'Worksheet';
-      }
-
-      const description = item.summary || 
-        (item.domain?.branchInfo ? `${item.domain.branchInfo.name} - ${item.title}` : '') || 
-        '';
-
-      const url = item.handle ? 
-        `https://www.ck12.org/${item.handle}` : 
-        'https://www.ck12.org';
-
-      return {
-        title: item.title || '',
-        description: description,
-        image_url: item.coverImage || 'https://placehold.co/400x300?text=No+Image',
-        link: url,
-        type: contentType,
-        source: 'CK12'
+    type CK12ArtifactType = 'lesson' | 'video' | 'quiz' | 'assessment' | 'worksheet' | 'article';
+    
+    type CK12Domain = {
+      branchInfo?: {
+        name: string;
       };
-    }) : [];
+    };
+    
+    type CK12Item = {
+      artifactType: CK12ArtifactType;
+      title: string;
+      summary?: string;
+      coverImage?: string;
+      handle?: string;
+      domain?: CK12Domain;
+    };
+    
+    type CK12SearchResult = {
+      title: string;
+      description: string;
+      image_url: string;
+      link: string;
+      type: string;
+      source: string;
+    };
+    
+    const transformedResults = Array.isArray(results) ? results
+      .filter((item): item is CK12Item => Boolean(item && item.title))
+      .map((item: CK12Item): CK12SearchResult => {
+        let contentType = 'Article';
+        
+        if (item.artifactType === 'lesson') {
+          contentType = 'Interactive Lesson';
+        } else if (item.artifactType === 'video' || (item.coverImage && item.coverImage.includes('video'))) {
+          contentType = 'Video';
+        } else if (item.artifactType === 'quiz' || item.artifactType === 'assessment') {
+          contentType = 'Quiz';
+        } else if (item.artifactType === 'worksheet') {
+          contentType = 'Worksheet';
+        }
+    
+        const description = item.summary || 
+          (item.domain?.branchInfo ? `${item.domain.branchInfo.name} - ${item.title}` : '') || 
+          '';
+    
+        const url = item.handle ? 
+          `https://www.ck12.org/${item.handle}` : 
+          'https://www.ck12.org';
+    
+        return {
+          title: item.title || '',
+          description: description,
+          image_url: item.coverImage || 'https://placehold.co/400x300?text=No+Image',
+          link: url,
+          type: contentType,
+          source: 'CK12'
+        };
+      }) : [];
 
     return transformedResults;
   } catch (error) {
@@ -135,13 +173,46 @@ async function searchCK12(query: string) {
   }
 }
 
-async function getStoredResults(supabase: any, userId: string, page: number = 1, pageSize: number = 10, searchQuery?: string) {
+type SupabaseClient = {
+  from: (table: string) => {
+    select: (columns: string, options?: { count: 'exact' }) => SupabaseQuery;
+    insert: (data: DatabaseResult[]) => Promise<{ error: Error | null }>;
+  };
+};
+
+type SupabaseQuery = {
+  eq: (column: string, value: string) => SupabaseQuery;
+  or: (conditions: string[]) => SupabaseQuery;
+  order: (column: string, options: { ascending: boolean }) => SupabaseQuery;
+  range: (from: number, to: number) => Promise<{ data: DatabaseResult[]; error: Error | null }>;
+  single: () => Promise<{ data: DatabaseResult | null; error: Error | null }>;
+};
+
+type DatabaseResult = {
+  id: string;
+  title: string;
+  description: string | null;
+  image_url: string | null;
+  type: string;
+  source: string;
+  link: string;
+  user_id: string;
+  created_at: string;
+};
+
+async function getStoredResults(
+  supabase: SupabaseClient, 
+  userId: string, 
+  page: number = 1, 
+  pageSize: number = 10, 
+  searchQuery?: string
+) {
   try {
     let query = supabase
       .from('search_results')
       .select('*', { count: 'exact' })
       .eq('user_id', userId)
-      .order('created_at', { ascending: false }); // Always order by created_at desc
+      .order('created_at', { ascending: false });
 
     // Add search filter if searchQuery is provided
     if (searchQuery?.trim()) {
@@ -185,7 +256,7 @@ async function getStoredResults(supabase: any, userId: string, page: number = 1,
     }
 
     return {
-      results: data.map((result: any) => ({
+      results: data.map((result: DatabaseResult) => ({
         id: result.id,
         title: result.title,
         description: result.description || '',
@@ -203,7 +274,18 @@ async function getStoredResults(supabase: any, userId: string, page: number = 1,
   }
 }
 
-async function storeResults(results: any[], userId: string, supabase: any) {
+async function storeResults(
+  results: Array<{
+    title: string;
+    description?: string;
+    image_url?: string;
+    link: string;
+    type: string;
+    source: string;
+  }>, 
+  userId: string, 
+  supabase: SupabaseClient
+) {
   for (const result of results) {
     try {
       const { data: existingData } = await supabase
@@ -215,12 +297,18 @@ async function storeResults(results: any[], userId: string, supabase: any) {
         .single();
 
       if (!existingData) {
-        await supabase
+        const { error } = await supabase
           .from('search_results')
           .insert([{
             ...result,
-            user_id: userId
+            user_id: userId,
+            id: crypto.randomUUID(),
+            created_at: new Date().toISOString()
           }]);
+          
+        if (error) {
+          console.error('Error inserting result:', error);
+        }
       }
     } catch (error) {
       console.error('Error storing result:', error);
@@ -250,10 +338,6 @@ export async function search(
   prevState: SearchState,
   formData: FormData
 ): Promise<SearchState> {
-  const searchQuery = formData.get('searchQuery') as string;
-  const page = Number(formData.get('page')) || DEFAULT_PAGE;
-  const pageSize = Number(formData.get('pageSize')) || DEFAULT_PAGE_SIZE;
-
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   
@@ -261,15 +345,12 @@ export async function search(
     throw new Error('Not authenticated');
   }
 
-  // Return a pending state first
-  const pendingState: SearchState = {
-    ...prevState,
-    pending: true
-  };
+  const searchQuery = formData.get('searchQuery') as string;
+  const page = Number(formData.get('page')) || DEFAULT_PAGE;
+  const pageSize = Number(formData.get('pageSize')) || DEFAULT_PAGE_SIZE;
 
   // Only search and store results if there's a non-empty search query
   if (searchQuery?.trim()) {
-    console.log("Fetching new results for query:", searchQuery);
     const [pbsResults, ck12Results] = await Promise.all([
       searchPBS(searchQuery),
       searchCK12(searchQuery)
@@ -281,7 +362,6 @@ export async function search(
 
   // Get paginated results from database (either all results or filtered by search)
   const { results, totalItems } = await getStoredResults(supabase, user.id, page, pageSize, searchQuery);
-  console.log(`Retrieved ${results.length} results from database`);
 
   // Group results by source if no specific search query
   const groupedResults = !searchQuery?.trim() ? groupResultsBySource(results) : undefined;
