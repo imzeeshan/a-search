@@ -2,12 +2,10 @@
   "extends": [
     "next/core-web-vitals",
     "eslint:recommended",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:react/recommended",
-    "plugin:react-hooks/recommended"
+    "plugin:@typescript-eslint/recommended"
   ],
   "parser": "@typescript-eslint/parser",
-  "plugins": ["@typescript-eslint", "react", "react-hooks"],
+  "plugins": ["@typescript-eslint"],
   "root": true,
   "rules": {
     "@typescript-eslint/explicit-function-return-type": ["error", {
@@ -19,8 +17,6 @@
       "argsIgnorePattern": "^_",
       "varsIgnorePattern": "^_"
     }],
-    "react/react-in-jsx-scope": "off",
-    "react/prop-types": "off",
     "no-console": ["warn", { "allow": ["warn", "error"] }]
   },
   "settings": {

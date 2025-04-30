@@ -136,17 +136,17 @@ async function searchCK12(query: string) {
     const transformedResults = Array.isArray(results) ? results
       .filter((item): item is CK12Item => Boolean(item && item.title))
       .map((item: CK12Item): CK12SearchResult => {
-        let contentType = 'Article';
         
-        if (item.artifactType === 'lesson') {
-          contentType = 'Interactive Lesson';
-        } else if (item.artifactType === 'video' || (item.coverImage && item.coverImage.includes('video'))) {
-          contentType = 'Video';
-        } else if (item.artifactType === 'quiz' || item.artifactType === 'assessment') {
-          contentType = 'Quiz';
-        } else if (item.artifactType === 'worksheet') {
-          contentType = 'Worksheet';
-        }
+        // Keep only this contentType declaration which correctly uses CK12 artifactType
+        const contentType = item.artifactType === 'lesson'
+          ? 'Interactive Lesson'
+          : item.artifactType === 'video' || (item.coverImage && item.coverImage.includes('video'))
+          ? 'Video'
+          : item.artifactType === 'quiz' || item.artifactType === 'assessment'
+          ? 'Quiz'
+          : item.artifactType === 'worksheet'
+          ? 'Worksheet'
+          : 'Article';
     
         const description = item.summary || 
           (item.domain?.branchInfo ? `${item.domain.branchInfo.name} - ${item.title}` : '') || 
